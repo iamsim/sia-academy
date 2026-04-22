@@ -1,7 +1,9 @@
 import { Badge, Card, Container, Grid, Group, Stack, Text, Title } from '@mantine/core'
+import { useEffect, useState } from 'react'
+import { listEvents } from '@/api/services'
+import type { AcademyEvent } from '@/api/types'
 import { HeroBackdrop } from '@/components/common/HeroBackdrop'
 import { heroOverlays, readableOnPhoto } from '@/constants/hero-overlays'
-import { useAcademyEvents } from '@/features/events/useAcademyEvents'
 import { siteImages } from '@/constants/site-images'
 
 function formatDateDisplay(date: string) {
@@ -15,7 +17,23 @@ function formatDateDisplay(date: string) {
 }
 
 export function EventsPage() {
-  const events = useAcademyEvents()
+  const [events, setEvents] = useState<AcademyEvent[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    let active = true
+    ;(async () => {
+      try {
+        const data = await listEvents()
+        if (active) setEvents(data)
+      } finally {
+        if (active) setLoading(false)
+      }
+    })()
+    return () => {
+      active = false
+    }
+  }, [])
 
   return (
     <>
@@ -36,6 +54,11 @@ export function EventsPage() {
       </HeroBackdrop>
       <Container size="md" py={{ base: 40, sm: 56 }}>
         <Stack gap="md">
+          {loading && (
+            <Card withBorder padding="lg" radius="md" shadow="xs">
+              <Text c="dimmed">Loading events...</Text>
+            </Card>
+          )}
           {events.length === 0 && (
             <Card withBorder padding="lg" radius="md" shadow="xs">
               <Text c="dimmed">No events available at the moment.</Text>

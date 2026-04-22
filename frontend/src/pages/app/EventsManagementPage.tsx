@@ -12,11 +12,9 @@ import {
 } from '@mantine/core'
 import { useMediaQuery } from '@mantine/hooks'
 import { IconPlus } from '@tabler/icons-react'
-import { useMemo, useState } from 'react'
-import {
-  addAcademyEvent,
-  useAcademyEvents,
-} from '@/features/events/useAcademyEvents'
+import { useEffect, useMemo, useState } from 'react'
+import { createEvent, listEvents } from '@/api/services'
+import type { AcademyEvent } from '@/api/types'
 
 type NewEventInput = {
   eventName: string
@@ -46,9 +44,25 @@ function formatDateDisplay(date: string) {
 
 export function EventsManagementPage() {
   const isMobile = useMediaQuery('(max-width: 48em)')
-  const events = useAcademyEvents()
+  const [events, setEvents] = useState<AcademyEvent[]>([])
+  const [loading, setLoading] = useState(true)
   const [createModalOpen, setCreateModalOpen] = useState(false)
   const [newEvent, setNewEvent] = useState<NewEventInput>(emptyEvent)
+
+  useEffect(() => {
+    let active = true
+    ;(async () => {
+      try {
+        const data = await listEvents()
+        if (active) setEvents(data)
+      } finally {
+        if (active) setLoading(false)
+      }
+    })()
+    return () => {
+      active = false
+    }
+  }, [])
 
   const sortedEvents = useMemo(
     () => [...events].sort((a, b) => a.date.localeCompare(b.date)),
@@ -66,13 +80,19 @@ export function EventsManagementPage() {
     const description = newEvent.description.trim()
     if (!eventName || !place || !newEvent.date || !newEvent.time || !description) return
 
-    addAcademyEvent({
+    createEvent({
       eventName,
       place,
       date: newEvent.date,
       time: newEvent.time,
       description,
     })
+      .then((created) => {
+        setEvents((prev) => [created, ...prev])
+      })
+      .catch((error) => {
+        alert(error instanceof Error ? error.message : 'Failed to add event')
+      })
     closeModal()
   }
 
@@ -102,6 +122,11 @@ export function EventsManagementPage() {
             </Table.Tr>
           </Table.Thead>
           <Table.Tbody>
+            {loading && (
+              <Table.Tr>
+                <Table.Td colSpan={5}>Loading events...</Table.Td>
+              </Table.Tr>
+            )}
             {sortedEvents.map((event) => (
               <Table.Tr key={event.id}>
                 <Table.Td>{event.eventName}</Table.Td>

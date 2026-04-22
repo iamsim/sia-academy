@@ -16,77 +16,23 @@ import {
   Title,
 } from '@mantine/core'
 import { useMediaQuery } from '@mantine/hooks'
-import { useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
+import {
+  getAttendanceByDate,
+  getAttendanceSummary,
+  saveAttendanceByDate,
+} from '@/api/services'
+import type { AttendanceEntry, AttendanceStatus, AttendanceSummaryRecord } from '@/api/types'
 
-type AttendanceStatus = 'Present' | 'Absent'
-
-type StudentAttendance = {
-  student: string
-  status: AttendanceStatus
-}
-
-type AttendanceDayRecord = {
-  date: string
-  entries: StudentAttendance[]
-}
-
-const studentNames = [
-  'Aarav Sharma',
-  'Diya Nair',
-  'Kiran Reddy',
-  'Ananya Iyer',
-  'Rahul Singh',
-  'Isha Menon',
-  'Arjun Patel',
-  'Nisha Kapoor',
-  'Veda Joshi',
-  'Kabir Khan',
-  'Riya Das',
-  'Yash Verma',
-] as const
+const attendancePageSize = 10
 
 function formatDateInput(date: Date) {
   return date.toISOString().slice(0, 10)
 }
 
-function statusFor(studentIndex: number, dayIndex: number): AttendanceStatus {
-  const score = (studentIndex * 13 + dayIndex * 7) % 10
-  if (score <= 8) return 'Present'
-  return 'Absent'
-}
-
-function generateAttendanceData(days: number): AttendanceDayRecord[] {
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
-
-  const records: AttendanceDayRecord[] = []
-  for (let i = 0; i < days; i += 1) {
-    const date = new Date(today)
-    date.setDate(today.getDate() - i)
-    const dateStr = formatDateInput(date)
-    records.push({
-      date: dateStr,
-      entries: studentNames.map((student, idx) => ({
-        student,
-        status: statusFor(idx, i),
-      })),
-    })
-  }
-  return records
-}
-
-const attendanceRecords = generateAttendanceData(90)
-const attendancePageSize = 10
-const submittedAttendanceStoragePrefix = 'sia-academy-attendance-submitted-'
-const attendanceDraftStoragePrefix = 'sia-academy-attendance-draft-'
-
 function statusColor(status: AttendanceStatus) {
   if (status === 'Present') return 'teal'
   return 'red'
-}
-
-function presentCount(record: AttendanceDayRecord) {
-  return record.entries.filter((entry) => entry.status !== 'Absent').length
 }
 
 function formatDateWithDay(date: string) {
@@ -99,44 +45,14 @@ function formatDateWithDay(date: string) {
   }).format(value)
 }
 
-function normalizeEntries(entries: StudentAttendance[]) {
-  const statusByStudent = new Map(entries.map((entry) => [entry.student, entry.status]))
-  return studentNames.map((student) => ({
-    student,
-    status: statusByStudent.get(student) ?? 'Absent',
-  })) satisfies StudentAttendance[]
-}
-
-function readStoredEntries(storageKey: string) {
-  try {
-    const raw = localStorage.getItem(storageKey)
-    if (!raw) return null
-    const parsed = JSON.parse(raw) as StudentAttendance[]
-    if (!Array.isArray(parsed)) return null
-    const valid = parsed.filter(
-      (item) =>
-        item &&
-        typeof item === 'object' &&
-        typeof item.student === 'string' &&
-        (item.status === 'Present' || item.status === 'Absent'),
-    )
-    if (valid.length === 0) return null
-    return normalizeEntries(valid)
-  } catch {
-    return null
-  }
+function toCheckboxValue(status: AttendanceStatus) {
+  return status !== 'Absent'
 }
 
 export function AttendancePage() {
   const isMobile = useMediaQuery('(max-width: 48em)')
   const today = formatDateInput(new Date())
   const monthStart = `${today.slice(0, 8)}01`
-  const todaySubmittedStorageKey = `${submittedAttendanceStoragePrefix}${today}`
-  const todayDraftStorageKey = `${attendanceDraftStoragePrefix}${today}`
-
-  const defaultTodayEntries = useMemo(() => {
-    return attendanceRecords.find((record) => record.date === today)?.entries ?? []
-  }, [today])
 
   const [fromDate, setFromDate] = useState(monthStart)
   const [toDate, setToDate] = useState(today)
@@ -145,101 +61,53 @@ export function AttendancePage() {
   const [takeAttendanceModalOpened, setTakeAttendanceModalOpened] = useState(false)
   const [statusEditMode, setStatusEditMode] = useState(false)
   const [page, setPage] = useState(1)
-  const [submittedOverrides, setSubmittedOverrides] = useState<
-    Record<string, StudentAttendance[]>
-  >(() => {
-    const todayStored = readStoredEntries(todaySubmittedStorageKey)
-    return todayStored ? { [today]: todayStored } : {}
-  })
-  const [todayDraftEntries, setTodayDraftEntries] = useState<StudentAttendance[]>(() => {
-    const draftStored = readStoredEntries(todayDraftStorageKey)
-    if (draftStored) return draftStored
-    const todayStored = readStoredEntries(todaySubmittedStorageKey)
-    if (todayStored) return todayStored
-    return normalizeEntries(defaultTodayEntries)
-  })
-  const [editableEntries, setEditableEntries] = useState<StudentAttendance[]>([])
+  const [records, setRecords] = useState<AttendanceSummaryRecord[]>([])
+  const [todayCount, setTodayCount] = useState(0)
+  const [monthCount, setMonthCount] = useState(0)
+  const [loadingSummary, setLoadingSummary] = useState(true)
+  const [todayDraftEntries, setTodayDraftEntries] = useState<AttendanceEntry[]>([])
+  const [selectedEntries, setSelectedEntries] = useState<AttendanceEntry[]>([])
+  const [editableEntries, setEditableEntries] = useState<AttendanceEntry[]>([])
 
-  const byDate = useMemo(() => {
-    return new Map(attendanceRecords.map((record) => [record.date, record]))
-  }, [])
-
-  function getSubmittedEntriesForDate(date: string) {
-    const fromState = submittedOverrides[date]
-    if (fromState) return fromState
-    return readStoredEntries(`${submittedAttendanceStoragePrefix}${date}`)
+  async function refreshSummary() {
+    const summary = await getAttendanceSummary({ from: fromDate, to: toDate })
+    setRecords(summary.records)
+    setTodayCount(summary.todayCount)
+    setMonthCount(summary.monthCount)
+    setLoadingSummary(false)
   }
 
-  function persistSubmittedEntriesForDate(date: string, nextEntries: StudentAttendance[]) {
-    const normalized = normalizeEntries(nextEntries)
-    localStorage.setItem(
-      `${submittedAttendanceStoragePrefix}${date}`,
-      JSON.stringify(normalized),
-    )
-    setSubmittedOverrides((prev) => ({ ...prev, [date]: normalized }))
-    if (date === today) {
-      setTodayDraftEntries(normalized)
-      localStorage.setItem(todayDraftStorageKey, JSON.stringify(normalized))
+  useEffect(() => {
+    let active = true
+    ;(async () => {
+      const summary = await getAttendanceSummary({ from: fromDate, to: toDate })
+      if (!active) return
+      setRecords(summary.records)
+      setTodayCount(summary.todayCount)
+      setMonthCount(summary.monthCount)
+      setLoadingSummary(false)
+    })()
+    return () => {
+      active = false
     }
-  }
+  }, [fromDate, toDate])
 
-  function getRecordForDate(date: string) {
-    const submitted = getSubmittedEntriesForDate(date)
-    if (submitted) {
-      return { date, entries: submitted } satisfies AttendanceDayRecord
-    }
-    return byDate.get(date)
-  }
-
-  const todayRecord = getRecordForDate(today)
-  const todayCount = todayRecord ? presentCount(todayRecord) : 0
-
-  const monthCount = useMemo(() => {
-    const currentMonth = today.slice(0, 7)
-    const resolveRecord = (date: string) => {
-      const submitted = submittedOverrides[date] ?? readStoredEntries(`${submittedAttendanceStoragePrefix}${date}`)
-      if (submitted) return { date, entries: submitted } satisfies AttendanceDayRecord
-      return byDate.get(date)
-    }
-    return attendanceRecords
-      .map((record) => resolveRecord(record.date) ?? record)
-      .filter((record) => record.date.startsWith(currentMonth))
-      .reduce((sum, record) => sum + presentCount(record), 0)
-  }, [today, submittedOverrides, byDate])
-
-  const filteredRecords = useMemo(() => {
-    const resolveRecord = (date: string) => {
-      const submitted = submittedOverrides[date] ?? readStoredEntries(`${submittedAttendanceStoragePrefix}${date}`)
-      if (submitted) return { date, entries: submitted } satisfies AttendanceDayRecord
-      return byDate.get(date)
-    }
-    return attendanceRecords
-      .map((record) => resolveRecord(record.date) ?? record)
-      .filter((record) => record.date >= fromDate && record.date <= toDate)
-      .sort((a, b) => b.date.localeCompare(a.date))
-  }, [fromDate, toDate, submittedOverrides, byDate])
-
-  const totalPages = Math.max(1, Math.ceil(filteredRecords.length / attendancePageSize))
+  const totalPages = Math.max(1, Math.ceil(records.length / attendancePageSize))
   const safePage = Math.min(page, totalPages)
-  const paginatedRecords = filteredRecords.slice(
+  const paginatedRecords = records.slice(
     (safePage - 1) * attendancePageSize,
     safePage * attendancePageSize,
   )
-
-  const selectedRecord = getRecordForDate(selectedDate)
 
   return (
     <Stack gap="lg">
       <Title order={3}>Attendance</Title>
       <Group justify="flex-end">
         <Button
-          onClick={() => {
+          onClick={async () => {
             setSelectedDate(today)
-            const latestDraft =
-              readStoredEntries(todayDraftStorageKey) ??
-              getSubmittedEntriesForDate(today) ??
-              normalizeEntries(defaultTodayEntries)
-            setTodayDraftEntries(latestDraft)
+            const response = await getAttendanceByDate(today)
+            setTodayDraftEntries(response.entries)
             setTakeAttendanceModalOpened(true)
           }}
         >
@@ -299,7 +167,7 @@ export function AttendancePage() {
             w={{ base: '100%', sm: 'auto' }}
           />
           <Text size="sm" c="dimmed" pb={4}>
-            {filteredRecords.length} day records
+            {records.length} day records
           </Text>
         </Group>
 
@@ -314,12 +182,19 @@ export function AttendancePage() {
               </Table.Tr>
             </Table.Thead>
             <Table.Tbody>
+              {loadingSummary && (
+                <Table.Tr>
+                  <Table.Td colSpan={4}>Loading attendance...</Table.Td>
+                </Table.Tr>
+              )}
               {paginatedRecords.map((record) => (
                 <Table.Tr
                   key={record.date}
-                  onClick={() => {
+                  onClick={async () => {
                     setSelectedDate(record.date)
-                    setEditableEntries(normalizeEntries(record.entries))
+                    const response = await getAttendanceByDate(record.date)
+                    setSelectedEntries(response.entries)
+                    setEditableEntries(response.entries)
                     setStatusEditMode(false)
                     setStatusModalOpened(true)
                   }}
@@ -329,8 +204,8 @@ export function AttendancePage() {
                     <Text fw={record.date === selectedDate ? 700 : 500}>{record.date}</Text>
                   </Table.Td>
                   <Table.Td>{formatDateWithDay(record.date).split(',')[0]}</Table.Td>
-                  <Table.Td>{presentCount(record)}</Table.Td>
-                  <Table.Td>{record.entries.length}</Table.Td>
+                  <Table.Td>{record.attendanceCount}</Table.Td>
+                  <Table.Td>{record.totalStudents}</Table.Td>
                 </Table.Tr>
               ))}
             </Table.Tbody>
@@ -338,7 +213,7 @@ export function AttendancePage() {
         </ScrollArea>
         <Group justify="space-between" mt="md" wrap="wrap" gap="sm">
           <Text size="sm" c="dimmed">
-            Showing {paginatedRecords.length} of {filteredRecords.length}
+            Showing {paginatedRecords.length} of {records.length}
           </Text>
           <Pagination total={totalPages} value={safePage} onChange={setPage} />
         </Group>
@@ -359,24 +234,22 @@ export function AttendancePage() {
         <Stack gap="xs">
           {todayDraftEntries.map((entry) => (
             <Checkbox
-              key={entry.student}
-              checked={entry.status !== 'Absent'}
-              label={entry.student}
+              key={entry.studentId}
+              checked={toCheckboxValue(entry.status)}
+              label={entry.studentName}
               onChange={(event) => {
                 const nextStatus: AttendanceStatus = event.currentTarget.checked
                   ? 'Present'
                   : 'Absent'
                 const next = todayDraftEntries.map((item) =>
-                  item.student === entry.student
+                  item.studentId === entry.studentId
                     ? {
                         ...item,
                         status: nextStatus,
                       }
                     : item,
                 )
-                const normalized = normalizeEntries(next)
-                setTodayDraftEntries(normalized)
-                localStorage.setItem(todayDraftStorageKey, JSON.stringify(normalized))
+                setTodayDraftEntries(next)
               }}
             />
           ))}
@@ -386,8 +259,9 @@ export function AttendancePage() {
             Cancel
           </Button>
           <Button
-            onClick={() => {
-              persistSubmittedEntriesForDate(today, todayDraftEntries)
+            onClick={async () => {
+              await saveAttendanceByDate(today, todayDraftEntries)
+              await refreshSummary()
               setTakeAttendanceModalOpened(false)
             }}
           >
@@ -416,8 +290,10 @@ export function AttendancePage() {
                 </Button>
                 <Button
                   size="xs"
-                  onClick={() => {
-                    persistSubmittedEntriesForDate(selectedDate, editableEntries)
+                  onClick={async () => {
+                    await saveAttendanceByDate(selectedDate, editableEntries)
+                    setSelectedEntries(editableEntries)
+                    await refreshSummary()
                     setStatusEditMode(false)
                   }}
                 >
@@ -436,16 +312,16 @@ export function AttendancePage() {
           <Stack gap="xs">
             {editableEntries.map((entry) => (
               <Checkbox
-                key={`${selectedDate}-${entry.student}`}
-                checked={entry.status !== 'Absent'}
-                label={entry.student}
+                key={`${selectedDate}-${entry.studentId}`}
+                checked={toCheckboxValue(entry.status)}
+                label={entry.studentName}
                 onChange={(event) => {
                   const nextStatus: AttendanceStatus = event.currentTarget.checked
                     ? 'Present'
                     : 'Absent'
                   setEditableEntries((prev) =>
                     prev.map((item) =>
-                      item.student === entry.student ? { ...item, status: nextStatus } : item,
+                      item.studentId === entry.studentId ? { ...item, status: nextStatus } : item,
                     ),
                   )
                 }}
@@ -462,9 +338,9 @@ export function AttendancePage() {
                 </Table.Tr>
               </Table.Thead>
               <Table.Tbody>
-                {(selectedRecord?.entries ?? []).map((entry) => (
-                  <Table.Tr key={`${selectedDate}-${entry.student}`}>
-                    <Table.Td>{entry.student}</Table.Td>
+                {selectedEntries.map((entry) => (
+                  <Table.Tr key={`${selectedDate}-${entry.studentId}`}>
+                    <Table.Td>{entry.studentName}</Table.Td>
                     <Table.Td>
                       <Badge variant="light" color={statusColor(entry.status)}>
                         {entry.status}

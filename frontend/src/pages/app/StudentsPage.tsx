@@ -15,39 +15,16 @@ import {
 } from '@mantine/core'
 import { useMediaQuery } from '@mantine/hooks'
 import { IconEdit, IconPlus, IconSearch, IconTrash } from '@tabler/icons-react'
-import { useMemo, useState } from 'react'
-
-type Student = {
-  id: string
-  name: string
-  age: number
-  belt: string
-  fatherName: string
-  motherName: string
-  address: string
-  primaryContactNumber: string
-}
-
-const initialStudents: Student[] = [
-  { id: 'S001', name: 'Aarav Sharma', age: 10, belt: 'Yellow', fatherName: 'Rohit Sharma', motherName: 'Neha Sharma', address: '12 Green Park, East Street', primaryContactNumber: '9876543210' },
-  { id: 'S002', name: 'Diya Nair', age: 12, belt: 'Green', fatherName: 'Arun Nair', motherName: 'Meera Nair', address: '22 Lake View, Main Road', primaryContactNumber: '9898981234' },
-  { id: 'S003', name: 'Kiran Reddy', age: 15, belt: 'Blue', fatherName: 'Ramesh Reddy', motherName: 'Suma Reddy', address: '7 Lotus Colony, Sector 4', primaryContactNumber: '9988776655' },
-  { id: 'S004', name: 'Ananya Iyer', age: 9, belt: 'White', fatherName: 'Vijay Iyer', motherName: 'Lakshmi Iyer', address: '88 Temple Street, South Block', primaryContactNumber: '9876501234' },
-  { id: 'S005', name: 'Rahul Singh', age: 14, belt: 'Red', fatherName: 'Manoj Singh', motherName: 'Pooja Singh', address: '3 Park Avenue, West End', primaryContactNumber: '9000012345' },
-  { id: 'S006', name: 'Isha Menon', age: 11, belt: 'Yellow', fatherName: 'Rajiv Menon', motherName: 'Deepa Menon', address: '16 Palm Residency, North Lane', primaryContactNumber: '9811122233' },
-  { id: 'S007', name: 'Arjun Patel', age: 13, belt: 'Green', fatherName: 'Nitin Patel', motherName: 'Komal Patel', address: '4 Riverfront, Block B', primaryContactNumber: '9822233344' },
-  { id: 'S008', name: 'Nisha Kapoor', age: 16, belt: 'Black', fatherName: 'Sanjay Kapoor', motherName: 'Ritu Kapoor', address: '90 City Heights, Tower 2', primaryContactNumber: '9833344455' },
-  { id: 'S009', name: 'Veda Joshi', age: 8, belt: 'White', fatherName: 'Amit Joshi', motherName: 'Priya Joshi', address: '11 Sunrise Enclave, Lane 5', primaryContactNumber: '9844455566' },
-  { id: 'S010', name: 'Kabir Khan', age: 12, belt: 'Blue', fatherName: 'Imran Khan', motherName: 'Saba Khan', address: '24 Rose Garden, Unit 3', primaryContactNumber: '9855566677' },
-  { id: 'S011', name: 'Riya Das', age: 10, belt: 'Yellow', fatherName: 'Subhash Das', motherName: 'Anita Das', address: '17 Hill View, Block C', primaryContactNumber: '9866677788' },
-  { id: 'S012', name: 'Yash Verma', age: 15, belt: 'Red', fatherName: 'Alok Verma', motherName: 'Shalini Verma', address: '50 Central Plaza, 1st Cross', primaryContactNumber: '9877788899' },
-]
+import { useEffect, useMemo, useState } from 'react'
+import { createStudent, listStudents } from '@/api/services'
+import type { Student } from '@/api/types'
 
 const pageSize = 6
 
 export function StudentsPage() {
   const isMobile = useMediaQuery('(max-width: 48em)')
-  const [students, setStudents] = useState<Student[]>(initialStudents)
+  const [students, setStudents] = useState<Student[]>([])
+  const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [beltFilter, setBeltFilter] = useState<string | null>('All')
   const [page, setPage] = useState(1)
@@ -61,6 +38,21 @@ export function StudentsPage() {
     address: '',
     primaryContactNumber: '',
   })
+
+  useEffect(() => {
+    let active = true
+    ;(async () => {
+      try {
+        const data = await listStudents()
+        if (active) setStudents(data)
+      } finally {
+        if (active) setLoading(false)
+      }
+    })()
+    return () => {
+      active = false
+    }
+  }, [])
 
   const filteredStudents = useMemo(() => {
     const query = search.trim().toLowerCase()
@@ -123,14 +115,7 @@ export function StudentsPage() {
       return
     }
 
-    const maxId = students.reduce((max, student) => {
-      const numeric = Number(student.id.replace('S', ''))
-      return Number.isNaN(numeric) ? max : Math.max(max, numeric)
-    }, 0)
-    const nextId = `S${String(maxId + 1).padStart(3, '0')}`
-
-    const nextStudent: Student = {
-      id: nextId,
+    const nextStudent: Omit<Student, 'id'> = {
       name: trimmedName,
       age: parsedAge,
       belt: newStudent.belt,
@@ -140,10 +125,16 @@ export function StudentsPage() {
       primaryContactNumber: trimmedContact,
     }
 
-    setStudents((current) => [nextStudent, ...current])
-    setCreateModalOpen(false)
-    resetNewStudentForm()
-    setPage(1)
+    createStudent(nextStudent)
+      .then((created) => {
+        setStudents((current) => [created, ...current])
+        setPage(1)
+        setCreateModalOpen(false)
+        resetNewStudentForm()
+      })
+      .catch((error) => {
+        alert(error instanceof Error ? error.message : 'Failed to add student')
+      })
   }
 
   return (
@@ -203,6 +194,11 @@ export function StudentsPage() {
             </Table.Tr>
           </Table.Thead>
           <Table.Tbody>
+            {loading && (
+              <Table.Tr>
+                <Table.Td colSpan={8}>Loading students...</Table.Td>
+              </Table.Tr>
+            )}
             {paginatedStudents.map((student) => (
               <Table.Tr key={student.id}>
                 <Table.Td>{student.name}</Table.Td>
@@ -249,9 +245,10 @@ export function StudentsPage() {
           <TextInput
             label="Name"
             value={newStudent.name}
-            onChange={(event) =>
-              setNewStudent((prev) => ({ ...prev, name: event.currentTarget.value }))
-            }
+            onChange={(event) => {
+              const value = event.currentTarget.value
+              setNewStudent((prev) => ({ ...prev, name: value }))
+            }}
             required
           />
           <TextInput
@@ -259,12 +256,13 @@ export function StudentsPage() {
             type="number"
             min={1}
             value={String(newStudent.age || '')}
-            onChange={(event) =>
+            onChange={(event) => {
+              const value = event.currentTarget.value
               setNewStudent((prev) => ({
                 ...prev,
-                age: Number(event.currentTarget.value || 0),
+                age: Number(value || 0),
               }))
-            }
+            }}
             required
           />
           <Select
@@ -279,36 +277,40 @@ export function StudentsPage() {
           <TextInput
             label="Father Name"
             value={newStudent.fatherName}
-            onChange={(event) =>
-              setNewStudent((prev) => ({ ...prev, fatherName: event.currentTarget.value }))
-            }
+            onChange={(event) => {
+              const value = event.currentTarget.value
+              setNewStudent((prev) => ({ ...prev, fatherName: value }))
+            }}
             required
           />
           <TextInput
             label="Mother Name"
             value={newStudent.motherName}
-            onChange={(event) =>
-              setNewStudent((prev) => ({ ...prev, motherName: event.currentTarget.value }))
-            }
+            onChange={(event) => {
+              const value = event.currentTarget.value
+              setNewStudent((prev) => ({ ...prev, motherName: value }))
+            }}
             required
           />
           <TextInput
             label="Address"
             value={newStudent.address}
-            onChange={(event) =>
-              setNewStudent((prev) => ({ ...prev, address: event.currentTarget.value }))
-            }
+            onChange={(event) => {
+              const value = event.currentTarget.value
+              setNewStudent((prev) => ({ ...prev, address: value }))
+            }}
             required
           />
           <TextInput
             label="Primary Contact Number"
             value={newStudent.primaryContactNumber}
-            onChange={(event) =>
+            onChange={(event) => {
+              const value = event.currentTarget.value
               setNewStudent((prev) => ({
                 ...prev,
-                primaryContactNumber: event.currentTarget.value,
+                primaryContactNumber: value,
               }))
-            }
+            }}
             required
           />
           <Group justify="flex-end">

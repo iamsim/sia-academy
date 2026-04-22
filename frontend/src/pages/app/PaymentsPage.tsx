@@ -12,29 +12,9 @@ import {
   Title,
 } from '@mantine/core'
 import { IconFileInvoice, IconSearch } from '@tabler/icons-react'
-import { useMemo, useState } from 'react'
-
-type Payment = {
-  id: string
-  student: string
-  paymentMode: 'UPI' | 'Cash' | 'Card' | 'Bank Transfer'
-  amount: number
-  paymentDate: string
-  receipt: string
-}
-
-const payments: Payment[] = [
-  { id: 'P1001', student: 'Aarav Sharma', paymentMode: 'UPI', amount: 2500, paymentDate: '2026-04-01', receipt: 'RCPT-2026-001' },
-  { id: 'P1002', student: 'Diya Nair', paymentMode: 'Cash', amount: 2500, paymentDate: '2026-04-02', receipt: 'RCPT-2026-002' },
-  { id: 'P1003', student: 'Kiran Reddy', paymentMode: 'Card', amount: 3000, paymentDate: '2026-04-03', receipt: 'RCPT-2026-003' },
-  { id: 'P1004', student: 'Ananya Iyer', paymentMode: 'UPI', amount: 2500, paymentDate: '2026-04-04', receipt: 'RCPT-2026-004' },
-  { id: 'P1005', student: 'Rahul Singh', paymentMode: 'Bank Transfer', amount: 3200, paymentDate: '2026-04-05', receipt: 'RCPT-2026-005' },
-  { id: 'P1006', student: 'Isha Menon', paymentMode: 'Cash', amount: 2500, paymentDate: '2026-04-06', receipt: 'RCPT-2026-006' },
-  { id: 'P1007', student: 'Arjun Patel', paymentMode: 'UPI', amount: 2700, paymentDate: '2026-04-08', receipt: 'RCPT-2026-007' },
-  { id: 'P1008', student: 'Nisha Kapoor', paymentMode: 'Card', amount: 3500, paymentDate: '2026-04-10', receipt: 'RCPT-2026-008' },
-  { id: 'P1009', student: 'Veda Joshi', paymentMode: 'UPI', amount: 2500, paymentDate: '2026-04-12', receipt: 'RCPT-2026-009' },
-  { id: 'P1010', student: 'Kabir Khan', paymentMode: 'Bank Transfer', amount: 2800, paymentDate: '2026-04-14', receipt: 'RCPT-2026-010' },
-]
+import { useEffect, useMemo, useState } from 'react'
+import { listPayments } from '@/api/services'
+import type { Payment } from '@/api/types'
 
 const pageSize = 5
 
@@ -52,9 +32,26 @@ function paymentModeColor(mode: Payment['paymentMode']) {
 }
 
 export function PaymentsPage() {
+  const [payments, setPayments] = useState<Payment[]>([])
+  const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [modeFilter, setModeFilter] = useState<string | null>('All')
   const [page, setPage] = useState(1)
+
+  useEffect(() => {
+    let active = true
+    ;(async () => {
+      try {
+        const data = await listPayments()
+        if (active) setPayments(data)
+      } finally {
+        if (active) setLoading(false)
+      }
+    })()
+    return () => {
+      active = false
+    }
+  }, [])
 
   const filteredPayments = useMemo(() => {
     const query = search.trim().toLowerCase()
@@ -64,14 +61,14 @@ export function PaymentsPage() {
       const matchesSearch =
         query.length === 0
           ? true
-          : [payment.student, payment.receipt, payment.paymentDate]
+          : [payment.studentName ?? '', payment.receipt, payment.paymentDate]
               .join(' ')
               .toLowerCase()
               .includes(query)
 
       return matchesMode && matchesSearch
     })
-  }, [search, modeFilter])
+  }, [payments, search, modeFilter])
 
   const totalPages = Math.max(1, Math.ceil(filteredPayments.length / pageSize))
   const safePage = Math.min(page, totalPages)
@@ -127,9 +124,14 @@ export function PaymentsPage() {
             </Table.Tr>
           </Table.Thead>
           <Table.Tbody>
+            {loading && (
+              <Table.Tr>
+                <Table.Td colSpan={6}>Loading payments...</Table.Td>
+              </Table.Tr>
+            )}
             {paginatedPayments.map((payment) => (
               <Table.Tr key={payment.id}>
-                <Table.Td>{payment.student}</Table.Td>
+                <Table.Td>{payment.studentName ?? '-'}</Table.Td>
                 <Table.Td>
                   <Badge variant="light" color={paymentModeColor(payment.paymentMode)}>
                     {payment.paymentMode}
