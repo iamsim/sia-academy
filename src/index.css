@@ -1,0 +1,55 @@
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=Outfit:wght@500;600;700&display=swap');
+
+:root {
+  color-scheme: light;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+}
+
+.site-nav-link {
+  color: var(--mantine-color-dark-6);
+  font-weight: 500;
+  font-size: var(--mantine-font-size-sm);
+  text-decoration: none;
+  padding: 0.35rem 0.5rem;
+  border-radius: var(--mantine-radius-sm);
+  transition: background-color 120ms ease, color 120ms ease;
+}
+
+.site-nav-link:hover {
+  color: var(--mantine-color-siaSky-7);
+  background-color: var(--mantine-color-siaSky-0);
+}
+
+.site-nav-link--active {
+  color: var(--mantine-color-siaSky-8);
+  background-color: var(--mantine-color-siaSky-1);
+}
+
+.app-side-link {
+  color: var(--mantine-color-dark-6);
+  text-decoration: none;
+  border-radius: var(--mantine-radius-sm);
+  padding: 0.5rem 0.6rem;
+  transition: background-color 120ms ease, color 120ms ease;
+}
+
+.app-side-link:hover {
+  color: var(--mantine-color-siaSky-7);
+  background-color: var(--mantine-color-siaSky-0);
+}
+
+.app-side-link--active {
+  color: var(--mantine-color-siaSky-8);
+  background-color: var(--mantine-color-siaSky-1);
+}
