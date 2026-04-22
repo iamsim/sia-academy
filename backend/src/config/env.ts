@@ -1,20 +1,15 @@
 import dotenv from 'dotenv'
 import fs from 'node:fs'
 import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 
-/**
- * Load env from the backend package root first, then `src/.env` (common mistake when
- * running `npm run dev` from `backend/`, where the default dotenv path is `./.env` only).
- */
+/** `backend/` — stable regardless of `process.cwd()` (repo root vs package root). */
+const packageRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..')
+
 function loadEnvFiles() {
-  const cwd = process.cwd()
-  const rootEnv = path.join(cwd, '.env')
-  const srcEnv = path.join(cwd, 'src', '.env')
-
-  if (fs.existsSync(rootEnv)) {
-    dotenv.config({ path: rootEnv })
-  } else if (fs.existsSync(srcEnv)) {
-    dotenv.config({ path: srcEnv })
+  const envFile = path.join(packageRoot, '.env')
+  if (fs.existsSync(envFile)) {
+    dotenv.config({ path: envFile })
   } else {
     dotenv.config()
   }
