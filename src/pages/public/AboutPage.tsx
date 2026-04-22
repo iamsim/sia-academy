@@ -1,4 +1,4 @@
-import { Anchor, Card, Container, List, Stack, Text, Title } from '@mantine/core'
+import { Anchor, Card, Container, Image, List, Stack, Text, Title } from '@mantine/core'
 import { HeroBackdrop } from '@/components/common/HeroBackdrop'
 import { heroOverlays, readableOnPhoto } from '@/constants/hero-overlays'
 import { siteImages } from '@/constants/site-images'
@@ -48,6 +48,19 @@ export function AboutPage() {
             Our instructors hold recognised qualifications and continue their own training. Student safety and
             respectful conduct are non-negotiable on and off the mat.
           </Text>
+          <Card withBorder radius="md" p="md">
+            <Stack gap="sm">
+              <Image
+                src="/images/head-coach-naveen.jpg"
+                alt="Head Coach Naveen Kumar R"
+                height={260}
+                fit="cover"
+                radius="md"
+              />
+              <Title order={4}>Naveen Kumar R</Title>
+              <Text c="dimmed">Head Coach • Black Belt 2 Dan</Text>
+            </Stack>
+          </Card>
           <Title order={3}>Contact us</Title>
           <Card withBorder radius="md" p="lg">
             <Stack gap="sm">
