@@ -1,3 +1,4 @@
+import { hashPassword } from '../auth/password.js'
 import { pool } from './pool.js'
 
 const seedStudents = [
@@ -6,6 +7,37 @@ const seedStudents = [
   ['Kiran Reddy', 15, 'Blue', 'Ramesh Reddy', 'Suma Reddy', '7 Lotus Colony, Sector 4', '9988776655'],
   ['Ananya Iyer', 9, 'White', 'Vijay Iyer', 'Lakshmi Iyer', '88 Temple Street, South Block', '9876501234'],
   ['Rahul Singh', 14, 'Red', 'Manoj Singh', 'Pooja Singh', '3 Park Avenue, West End', '9000012345'],
+] as const
+
+const seedMembers = [
+  {
+    email: 'admin@sia.academy',
+    displayName: 'Academy Admin',
+    phone: '9000000001',
+    role: 'Admin',
+    isActive: true,
+  },
+  {
+    email: 'coach@sia.academy',
+    displayName: 'Head Coach',
+    phone: '9000000002',
+    role: 'Instructor',
+    isActive: true,
+  },
+  {
+    email: 'member@sia.academy',
+    displayName: 'Demo Member',
+    phone: '9000000003',
+    role: 'Member',
+    isActive: true,
+  },
+  {
+    email: 'inactive@sia.academy',
+    displayName: 'Former Member',
+    phone: null,
+    role: 'Member',
+    isActive: false,
+  },
 ] as const
 
 const seedEvents = [
@@ -59,6 +91,30 @@ export async function initDb() {
       UNIQUE(attendance_date, student_id)
     );
   `)
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS members (
+      id SERIAL PRIMARY KEY,
+      email TEXT NOT NULL UNIQUE,
+      display_name TEXT NOT NULL,
+      phone TEXT,
+      role TEXT NOT NULL CHECK (role IN ('Admin', 'Instructor', 'Member')),
+      is_active BOOLEAN NOT NULL DEFAULT true,
+      password_hash TEXT NOT NULL
+    );
+  `)
+
+  const memberCount = await pool.query<{ count: string }>('SELECT COUNT(*)::text AS count FROM members')
+  if (Number(memberCount.rows[0]?.count ?? 0) === 0) {
+    const demoPasswordHash = hashPassword('demo123')
+    for (const m of seedMembers) {
+      await pool.query(
+        `INSERT INTO members (email, display_name, phone, role, is_active, password_hash)
+         VALUES ($1,$2,$3,$4,$5,$6)`,
+        [m.email, m.displayName, m.phone, m.role, m.isActive, demoPasswordHash],
+      )
+    }
+  }
 
   const studentCount = await pool.query<{ count: string }>('SELECT COUNT(*)::text AS count FROM students')
   if (Number(studentCount.rows[0]?.count ?? 0) === 0) {

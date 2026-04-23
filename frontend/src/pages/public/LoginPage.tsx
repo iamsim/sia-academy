@@ -14,6 +14,7 @@ import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { HeroBackdrop } from '@/components/common/HeroBackdrop'
 import { heroOverlays } from '@/constants/hero-overlays'
 import { siteImages } from '@/constants/site-images'
+import { loginMember } from '@/api/services'
 import { useAuth } from '@/contexts/useAuth'
 import { paths } from '@/routes/paths'
 
@@ -27,7 +28,6 @@ export function LoginPage() {
 
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [displayName, setDisplayName] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
 
@@ -43,11 +43,15 @@ export function LoginPage() {
       return
     }
     setSubmitting(true)
-    await new Promise((r) => setTimeout(r, 400))
-    const name = displayName.trim() || email.split('@')[0] || 'Member'
-    login(email.trim(), name)
-    setSubmitting(false)
-    navigate(from, { replace: true })
+    try {
+      const session = await loginMember({ email: email.trim(), password })
+      login(session.email, session.displayName)
+      navigate(from, { replace: true })
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Sign in failed.')
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   return (
@@ -66,8 +70,12 @@ export function LoginPage() {
               Member login
             </Title>
             <Text size="sm" c="dimmed">
-              This is a frontend placeholder: any email and password will sign you in for demo purposes.
-              Replace with your real auth API later.
+              Sign in with a member account from the database. Seeded demo accounts use password{' '}
+              <Text component="span" fw={600}>
+                demo123
+              </Text>{' '}
+              (for example <Text component="span" fw={600}>member@sia.academy</Text> or{' '}
+              <Text component="span" fw={600}>admin@sia.academy</Text>). Inactive members cannot sign in.
             </Text>
           </div>
           <form onSubmit={handleSubmit}>
@@ -80,12 +88,6 @@ export function LoginPage() {
                 value={email}
                 onChange={(e) => setEmail(e.currentTarget.value)}
                 required
-              />
-              <TextInput
-                label="Display name (optional)"
-                placeholder="How we greet you in the app"
-                value={displayName}
-                onChange={(e) => setDisplayName(e.currentTarget.value)}
               />
               <PasswordInput
                 label="Password"

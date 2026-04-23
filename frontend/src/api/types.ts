@@ -48,3 +48,45 @@ export type AttendanceSummaryResponse = {
   totalStudents: number
   records: AttendanceSummaryRecord[]
 }
+
+export type MemberRole = 'Admin' | 'Instructor' | 'Member'
+
+export type Member = {
+  id: number
+  email: string
+  displayName: string
+  phone: string | null
+  role: MemberRole
+  isActive: boolean
+}
+
+export type MemberListResponse = {
+  items: Member[]
+  total: number
+  page: number
+  pageSize: number
+}
+
+export type MemberLoginResponse = {
+  email: string
+  displayName: string
+}
+
+export type CreateMemberPayload = {
+  email: string
+  displayName: string
+  phone: string | null
+  role: MemberRole
+  isActive: boolean
+  password: string
+}
+
+export type UpdateMemberPayload = {
+  email: string
+  displayName: string
+  phone: string | null
+  role: MemberRole
+  isActive: boolean
+  /** Omit or leave empty to keep the current password. */
+  password?: string
+}

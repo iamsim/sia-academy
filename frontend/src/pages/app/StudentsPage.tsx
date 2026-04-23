@@ -16,10 +16,113 @@ import {
 import { useMediaQuery } from '@mantine/hooks'
 import { IconEdit, IconPlus, IconSearch, IconTrash } from '@tabler/icons-react'
 import { useEffect, useMemo, useState } from 'react'
-import { createStudent, listStudents } from '@/api/services'
+import { createStudent, deleteStudent, listStudents, updateStudent } from '@/api/services'
 import type { Student } from '@/api/types'
 
 const pageSize = 6
+
+type StudentFormValues = Omit<Student, 'id'>
+
+function StudentFields({
+  value,
+  onChange,
+}: {
+  value: StudentFormValues
+  onChange: (patch: Partial<StudentFormValues>) => void
+}) {
+  return (
+    <Stack>
+      <TextInput
+        label="Name"
+        value={value.name}
+        onChange={(event) => {
+          onChange({ name: event.currentTarget.value })
+        }}
+        required
+      />
+      <TextInput
+        label="Age"
+        type="number"
+        min={1}
+        value={String(value.age || '')}
+        onChange={(event) => {
+          onChange({ age: Number(event.currentTarget.value || 0) })
+        }}
+        required
+      />
+      <Select
+        label="Belt"
+        data={['White', 'Yellow', 'Green', 'Blue', 'Red', 'Black']}
+        value={value.belt}
+        onChange={(v) => onChange({ belt: v ?? 'White' })}
+        allowDeselect={false}
+      />
+      <TextInput
+        label="Father Name"
+        value={value.fatherName}
+        onChange={(event) => {
+          onChange({ fatherName: event.currentTarget.value })
+        }}
+        required
+      />
+      <TextInput
+        label="Mother Name"
+        value={value.motherName}
+        onChange={(event) => {
+          onChange({ motherName: event.currentTarget.value })
+        }}
+        required
+      />
+      <TextInput
+        label="Address"
+        value={value.address}
+        onChange={(event) => {
+          onChange({ address: event.currentTarget.value })
+        }}
+        required
+      />
+      <TextInput
+        label="Primary Contact Number"
+        value={value.primaryContactNumber}
+        onChange={(event) => {
+          onChange({ primaryContactNumber: event.currentTarget.value })
+        }}
+        required
+      />
+    </Stack>
+  )
+}
+
+function buildStudentPayload(values: StudentFormValues): Omit<Student, 'id'> | null {
+  const trimmedName = values.name.trim()
+  const trimmedFather = values.fatherName.trim()
+  const trimmedMother = values.motherName.trim()
+  const trimmedAddress = values.address.trim()
+  const trimmedContact = values.primaryContactNumber.trim()
+  const parsedAge = Number(values.age)
+
+  if (
+    !trimmedName ||
+    !trimmedFather ||
+    !trimmedMother ||
+    !trimmedAddress ||
+    !trimmedContact ||
+    Number.isNaN(parsedAge) ||
+    parsedAge <= 0
+  ) {
+    return null
+  }
+
+  return {
+    name: trimmedName,
+    age: parsedAge,
+    belt: values.belt,
+    fatherName: trimmedFather,
+    motherName: trimmedMother,
+    address: trimmedAddress,
+    primaryContactNumber: trimmedContact,
+  }
+}
 
 export function StudentsPage() {
   const isMobile = useMediaQuery('(max-width: 48em)')
@@ -29,7 +132,7 @@ export function StudentsPage() {
   const [beltFilter, setBeltFilter] = useState<string | null>('All')
   const [page, setPage] = useState(1)
   const [createModalOpen, setCreateModalOpen] = useState(false)
-  const [newStudent, setNewStudent] = useState<Omit<Student, 'id'>>({
+  const [newStudent, setNewStudent] = useState<StudentFormValues>({
     name: '',
     age: 0,
     belt: 'White',
@@ -38,6 +141,10 @@ export function StudentsPage() {
     address: '',
     primaryContactNumber: '',
   })
+  const [editStudent, setEditStudent] = useState<Student | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<Student | null>(null)
+  const [saving, setSaving] = useState(false)
+  const [deleting, setDeleting] = useState(false)
 
   useEffect(() => {
     let active = true
@@ -96,36 +203,10 @@ export function StudentsPage() {
   }
 
   function handleAddStudent() {
-    const trimmedName = newStudent.name.trim()
-    const trimmedFather = newStudent.fatherName.trim()
-    const trimmedMother = newStudent.motherName.trim()
-    const trimmedAddress = newStudent.address.trim()
-    const trimmedContact = newStudent.primaryContactNumber.trim()
-    const parsedAge = Number(newStudent.age)
+    const payload = buildStudentPayload(newStudent)
+    if (!payload) return
 
-    if (
-      !trimmedName ||
-      !trimmedFather ||
-      !trimmedMother ||
-      !trimmedAddress ||
-      !trimmedContact ||
-      Number.isNaN(parsedAge) ||
-      parsedAge <= 0
-    ) {
-      return
-    }
-
-    const nextStudent: Omit<Student, 'id'> = {
-      name: trimmedName,
-      age: parsedAge,
-      belt: newStudent.belt,
-      fatherName: trimmedFather,
-      motherName: trimmedMother,
-      address: trimmedAddress,
-      primaryContactNumber: trimmedContact,
-    }
-
-    createStudent(nextStudent)
+    createStudent(payload)
       .then((created) => {
         setStudents((current) => [created, ...current])
         setPage(1)
@@ -134,6 +215,43 @@ export function StudentsPage() {
       })
       .catch((error) => {
         alert(error instanceof Error ? error.message : 'Failed to add student')
+      })
+  }
+
+  function handleSaveEdit() {
+    if (!editStudent) return
+    const { id, ...formValues } = editStudent
+    const payload = buildStudentPayload(formValues)
+    if (!payload) return
+
+    setSaving(true)
+    updateStudent(id, payload)
+      .then((updated) => {
+        setStudents((current) => current.map((s) => (s.id === updated.id ? updated : s)))
+        setEditStudent(null)
+      })
+      .catch((error) => {
+        alert(error instanceof Error ? error.message : 'Failed to update student')
+      })
+      .finally(() => {
+        setSaving(false)
+      })
+  }
+
+  function handleConfirmDelete() {
+    if (!deleteTarget) return
+    setDeleting(true)
+    deleteStudent(deleteTarget.id)
+      .then(() => {
+        setStudents((current) => current.filter((s) => s.id !== deleteTarget.id))
+        setDeleteTarget(null)
+        setPage(1)
+      })
+      .catch((error) => {
+        alert(error instanceof Error ? error.message : 'Failed to delete student')
+      })
+      .finally(() => {
+        setDeleting(false)
       })
   }
 
@@ -210,10 +328,20 @@ export function StudentsPage() {
                 <Table.Td>{student.primaryContactNumber}</Table.Td>
                 <Table.Td>
                   <Group gap={6} wrap="nowrap">
-                    <ActionIcon variant="light" color="siaSky" aria-label="Edit student">
+                    <ActionIcon
+                      variant="light"
+                      color="siaSky"
+                      aria-label="Edit student"
+                      onClick={() => setEditStudent({ ...student })}
+                    >
                       <IconEdit size={16} />
                     </ActionIcon>
-                    <ActionIcon variant="light" color="red" aria-label="Delete student">
+                    <ActionIcon
+                      variant="light"
+                      color="red"
+                      aria-label="Delete student"
+                      onClick={() => setDeleteTarget(student)}
+                    >
                       <IconTrash size={16} />
                     </ActionIcon>
                   </Group>
@@ -242,76 +370,11 @@ export function StudentsPage() {
         fullScreen={isMobile}
       >
         <Stack>
-          <TextInput
-            label="Name"
-            value={newStudent.name}
-            onChange={(event) => {
-              const value = event.currentTarget.value
-              setNewStudent((prev) => ({ ...prev, name: value }))
+          <StudentFields
+            value={newStudent}
+            onChange={(patch) => {
+              setNewStudent((prev) => ({ ...prev, ...patch }))
             }}
-            required
-          />
-          <TextInput
-            label="Age"
-            type="number"
-            min={1}
-            value={String(newStudent.age || '')}
-            onChange={(event) => {
-              const value = event.currentTarget.value
-              setNewStudent((prev) => ({
-                ...prev,
-                age: Number(value || 0),
-              }))
-            }}
-            required
-          />
-          <Select
-            label="Belt"
-            data={['White', 'Yellow', 'Green', 'Blue', 'Red', 'Black']}
-            value={newStudent.belt}
-            onChange={(value) =>
-              setNewStudent((prev) => ({ ...prev, belt: value ?? 'White' }))
-            }
-            allowDeselect={false}
-          />
-          <TextInput
-            label="Father Name"
-            value={newStudent.fatherName}
-            onChange={(event) => {
-              const value = event.currentTarget.value
-              setNewStudent((prev) => ({ ...prev, fatherName: value }))
-            }}
-            required
-          />
-          <TextInput
-            label="Mother Name"
-            value={newStudent.motherName}
-            onChange={(event) => {
-              const value = event.currentTarget.value
-              setNewStudent((prev) => ({ ...prev, motherName: value }))
-            }}
-            required
-          />
-          <TextInput
-            label="Address"
-            value={newStudent.address}
-            onChange={(event) => {
-              const value = event.currentTarget.value
-              setNewStudent((prev) => ({ ...prev, address: value }))
-            }}
-            required
-          />
-          <TextInput
-            label="Primary Contact Number"
-            value={newStudent.primaryContactNumber}
-            onChange={(event) => {
-              const value = event.currentTarget.value
-              setNewStudent((prev) => ({
-                ...prev,
-                primaryContactNumber: value,
-              }))
-            }}
-            required
           />
           <Group justify="flex-end">
             <Button variant="default" onClick={() => setCreateModalOpen(false)}>
@@ -320,6 +383,66 @@ export function StudentsPage() {
             <Button onClick={handleAddStudent}>Add Student</Button>
           </Group>
         </Stack>
+      </Modal>
+
+      <Modal
+        opened={editStudent !== null}
+        onClose={() => setEditStudent(null)}
+        title="Edit Student"
+        centered
+        fullScreen={isMobile}
+      >
+        {editStudent && (
+          <Stack>
+            <StudentFields
+              value={{
+                name: editStudent.name,
+                age: editStudent.age,
+                belt: editStudent.belt,
+                fatherName: editStudent.fatherName,
+                motherName: editStudent.motherName,
+                address: editStudent.address,
+                primaryContactNumber: editStudent.primaryContactNumber,
+              }}
+              onChange={(patch) => {
+                setEditStudent((prev) => (prev ? { ...prev, ...patch } : null))
+              }}
+            />
+            <Group justify="flex-end">
+              <Button variant="default" onClick={() => setEditStudent(null)}>
+                Cancel
+              </Button>
+              <Button onClick={handleSaveEdit} loading={saving}>
+                Save changes
+              </Button>
+            </Group>
+          </Stack>
+        )}
+      </Modal>
+
+      <Modal
+        opened={deleteTarget !== null}
+        onClose={() => setDeleteTarget(null)}
+        title="Delete student"
+        centered
+      >
+        {deleteTarget && (
+          <Stack gap="md">
+            <Text size="sm">
+              Remove <strong>{deleteTarget.name}</strong> from the roster? Related attendance rows
+              will be removed; payments for this student will keep the receipt but lose the student
+              link.
+            </Text>
+            <Group justify="flex-end">
+              <Button variant="default" onClick={() => setDeleteTarget(null)}>
+                Cancel
+              </Button>
+              <Button color="red" onClick={handleConfirmDelete} loading={deleting}>
+                Delete
+              </Button>
+            </Group>
+          </Stack>
+        )}
       </Modal>
     </Card>
   )

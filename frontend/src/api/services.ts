@@ -3,9 +3,42 @@ import type {
   AcademyEvent,
   AttendanceEntry,
   AttendanceSummaryResponse,
+  CreateMemberPayload,
+  Member,
+  MemberListResponse,
+  MemberLoginResponse,
+  MemberRole,
   Payment,
   Student,
+  UpdateMemberPayload,
 } from './types'
+
+export function loginMember(payload: { email: string; password: string }) {
+  return apiRequest<MemberLoginResponse>('/auth/login', { method: 'POST', body: payload })
+}
+
+export function listMembers(params: {
+  page: number
+  pageSize: number
+  search: string
+  role: 'All' | MemberRole
+}) {
+  const q = new URLSearchParams({
+    page: String(params.page),
+    pageSize: String(params.pageSize),
+    search: params.search,
+    role: params.role,
+  }).toString()
+  return apiRequest<MemberListResponse>(`/members?${q}`)
+}
+
+export function createMember(payload: CreateMemberPayload) {
+  return apiRequest<Member>('/members', { method: 'POST', body: payload })
+}
+
+export function updateMember(id: number, payload: UpdateMemberPayload) {
+  return apiRequest<Member>(`/members/${id}`, { method: 'PUT', body: payload })
+}
 
 export function listStudents() {
   return apiRequest<Student[]>('/students')
@@ -13,6 +46,14 @@ export function listStudents() {
 
 export function createStudent(payload: Omit<Student, 'id'>) {
   return apiRequest<Student>('/students', { method: 'POST', body: payload })
+}
+
+export function updateStudent(id: number, payload: Omit<Student, 'id'>) {
+  return apiRequest<Student>(`/students/${id}`, { method: 'PUT', body: payload })
+}
+
+export function deleteStudent(id: number) {
+  return apiRequest<void>(`/students/${id}`, { method: 'DELETE' })
 }
 
 export function listPayments() {

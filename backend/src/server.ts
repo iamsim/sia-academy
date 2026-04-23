@@ -1,14 +1,22 @@
 import cors from 'cors'
-import express from 'express'
+import express, { type Router } from 'express'
 import swaggerUi from 'swagger-ui-express'
 import { env } from './config/env.js'
 import { initDb } from './db/init.js'
 import { pool } from './db/pool.js'
 import { swaggerSpec } from './docs/swagger.js'
 import { attendanceRouter } from './routes/attendance.js'
+import { authRouter } from './routes/auth.js'
 import { eventsRouter } from './routes/events.js'
+import { membersRouter } from './routes/members.js'
 import { paymentsRouter } from './routes/payments.js'
 import { studentsRouter } from './routes/students.js'
+
+/** Expose routes under `/api{basePath}` (used by the Vite app) and under `{basePath}` for direct calls. */
+function mountApiRoutes(app: express.Application, basePath: string, router: Router) {
+  app.use(`/api${basePath}`, router)
+  app.use(basePath, router)
+}
 
 async function start() {
   await initDb()
@@ -27,10 +35,12 @@ async function start() {
   })
 
   app.use('/docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec))
-  app.use('/api/students', studentsRouter)
-  app.use('/api/payments', paymentsRouter)
-  app.use('/api/events', eventsRouter)
-  app.use('/api/attendance', attendanceRouter)
+  mountApiRoutes(app, '/auth', authRouter)
+  mountApiRoutes(app, '/members', membersRouter)
+  mountApiRoutes(app, '/students', studentsRouter)
+  mountApiRoutes(app, '/payments', paymentsRouter)
+  mountApiRoutes(app, '/events', eventsRouter)
+  mountApiRoutes(app, '/attendance', attendanceRouter)
 
   app.use((err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
     console.error(err)

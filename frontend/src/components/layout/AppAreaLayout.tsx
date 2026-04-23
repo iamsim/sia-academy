@@ -5,6 +5,7 @@ import {
   IconCalendarEvent,
   IconCreditCard,
   IconSchool,
+  IconUsers,
 } from '@tabler/icons-react'
 import { Link, NavLink, Outlet } from 'react-router-dom'
 import { SiteHeader } from '@/components/layout/SiteHeader'
@@ -12,6 +13,7 @@ import { paths } from '@/routes/paths'
 
 const appMenuItems = [
   { to: paths.app.attendance, label: 'Attendance', icon: IconCalendarCheck },
+  { to: paths.app.members, label: 'Members', icon: IconUsers },
   { to: paths.app.students, label: 'Students', icon: IconSchool },
   { to: paths.app.payments, label: 'Payments', icon: IconCreditCard },
   { to: paths.app.events, label: 'Events', icon: IconCalendarEvent },
