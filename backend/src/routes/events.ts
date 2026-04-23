@@ -12,6 +12,15 @@ const eventInputSchema = z.object({
 
 const idParamSchema = z.coerce.number().int().positive()
 
+type AcademyEventRow = {
+  id: number
+  eventName: string
+  place: string
+  date: string
+  time: string
+  description: string
+}
+
 export const eventsRouter = Router()
 
 eventsRouter.get('/', async (_req, res, next) => {
@@ -22,6 +31,29 @@ eventsRouter.get('/', async (_req, res, next) => {
       ORDER BY date ASC, id ASC
     `)
     res.json(result.rows)
+  } catch (error) {
+    next(error)
+  }
+})
+
+eventsRouter.get('/:id', async (req, res, next) => {
+  try {
+    const idParse = idParamSchema.safeParse(req.params.id)
+    if (!idParse.success) {
+      res.status(400).json({ message: 'Invalid event id' })
+      return
+    }
+    const result = await pool.query<AcademyEventRow>(
+      `SELECT id, event_name AS "eventName", place, date::text AS date, time, description
+       FROM events
+       WHERE id = $1`,
+      [idParse.data],
+    )
+    if (result.rowCount === 0) {
+      res.status(404).json({ message: 'Event not found' })
+      return
+    }
+    res.json(result.rows[0])
   } catch (error) {
     next(error)
   }

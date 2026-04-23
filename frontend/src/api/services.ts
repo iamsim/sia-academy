@@ -74,6 +74,10 @@ export function listEvents() {
   return apiRequest<AcademyEvent[]>('/events')
 }
 
+export function getEvent(id: number) {
+  return apiRequest<AcademyEvent>(`/events/${id}`)
+}
+
 export function createEvent(payload: Omit<AcademyEvent, 'id'>) {
   return apiRequest<AcademyEvent>('/events', { method: 'POST', body: payload })
 }

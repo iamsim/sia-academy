@@ -193,6 +193,14 @@ export const swaggerSpec = swaggerJsdoc({
         post: { summary: 'Create event', responses: { '201': { description: 'Created' } } },
       },
       '/api/events/{id}': {
+        get: {
+          summary: 'Get one event',
+          parameters: [{ in: 'path', name: 'id', required: true, schema: { type: 'integer' } }],
+          responses: {
+            '200': { description: 'Event' },
+            '404': { description: 'Not found' },
+          },
+        },
         put: {
           summary: 'Update event',
           parameters: [{ in: 'path', name: 'id', required: true, schema: { type: 'integer' } }],

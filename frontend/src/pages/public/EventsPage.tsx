@@ -1,19 +1,20 @@
-import { Badge, Card, Container, Grid, Group, Stack, Text, Title } from '@mantine/core'
+import { Badge, Card, Container, Group, SimpleGrid, Stack, Text, Title } from '@mantine/core'
 import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { listEvents } from '@/api/services'
 import type { AcademyEvent } from '@/api/types'
 import { HeroBackdrop } from '@/components/common/HeroBackdrop'
 import { heroOverlays, readableOnPhoto } from '@/constants/hero-overlays'
 import { siteImages } from '@/constants/site-images'
+import { eventDetailPath } from '@/routes/paths'
 import { formatEventTime12h } from '@/utils/format-event-time'
 
-function formatDateDisplay(date: string) {
-  if (!date) return '-'
+function formatDateShort(date: string) {
+  if (!date) return '—'
   return new Intl.DateTimeFormat('en-US', {
-    weekday: 'short',
-    year: 'numeric',
     month: 'short',
-    day: '2-digit',
+    day: 'numeric',
+    year: 'numeric',
   }).format(new Date(`${date}T00:00:00`))
 }
 
@@ -44,60 +45,64 @@ export function EventsPage() {
         py={{ base: 32, sm: 44 }}
         px="md"
       >
-        <Container size="md">
+        <Container size="lg">
           <Title order={1} mb="xs" style={readableOnPhoto}>
             Events
           </Title>
           <Text c="dark.7" fw={500} style={readableOnPhoto}>
-            Key dates for trials, gradings, and special sessions. Times are announced closer to each event.
+            Tap a card for full details — what to bring, venue notes, and more.
           </Text>
         </Container>
       </HeroBackdrop>
-      <Container size="md" py={{ base: 40, sm: 56 }}>
+      <Container size="lg" py={{ base: 40, sm: 56 }}>
         <Stack gap="md">
           {loading && (
-            <Card withBorder padding="lg" radius="md" shadow="xs">
-              <Text c="dimmed">Loading events...</Text>
-            </Card>
+            <Text c="dimmed" ta="center">
+              Loading events…
+            </Text>
           )}
-          {events.length === 0 && (
-            <Card withBorder padding="lg" radius="md" shadow="xs">
-              <Text c="dimmed">No events available at the moment.</Text>
-            </Card>
+          {!loading && events.length === 0 && (
+            <Text c="dimmed" ta="center">
+              No events available at the moment.
+            </Text>
           )}
-          {events.map((event) => (
-            <Card key={event.id} withBorder padding="lg" radius="md" shadow="xs">
-              <Group justify="space-between" align="flex-start" gap="sm">
-                <Title order={4}>{event.eventName}</Title>
-                <Badge variant="light" color="siaSky">
-                  Event
-                </Badge>
-              </Group>
-              <Grid gap="xs" mt="xs">
-                <Grid.Col span={{ base: 12, sm: 6 }}>
-                  <Text size="sm" c="dimmed">
-                    Place
-                  </Text>
-                  <Text fw={600}>{event.place}</Text>
-                </Grid.Col>
-                <Grid.Col span={{ base: 12, sm: 3 }}>
-                  <Text size="sm" c="dimmed">
-                    Date
-                  </Text>
-                  <Text fw={600}>{formatDateDisplay(event.date)}</Text>
-                </Grid.Col>
-                <Grid.Col span={{ base: 12, sm: 3 }}>
-                  <Text size="sm" c="dimmed">
-                    Time
-                  </Text>
-                  <Text fw={600}>{formatEventTime12h(event.time)}</Text>
-                </Grid.Col>
-              </Grid>
-              <Text c="dimmed" mt="sm">
-                {event.description}
-              </Text>
-            </Card>
-          ))}
+          {!loading && events.length > 0 && (
+            <SimpleGrid cols={{ base: 1, sm: 2, md: 3 }} spacing="md">
+              {events.map((event) => (
+                <Card
+                  key={event.id}
+                  component={Link}
+                  to={eventDetailPath(event.id)}
+                  withBorder
+                  padding="md"
+                  radius="md"
+                  shadow="sm"
+                  style={{
+                    textDecoration: 'none',
+                    color: 'inherit',
+                    transition: 'transform 120ms ease, box-shadow 120ms ease',
+                  }}
+                >
+                  <Stack gap="xs">
+                    <Group justify="space-between" align="flex-start" wrap="nowrap" gap="xs">
+                      <Title order={4} lineClamp={2}>
+                        {event.eventName}
+                      </Title>
+                      <Badge variant="light" color="siaSky" size="sm" flex="0 0 auto">
+                        Event
+                      </Badge>
+                    </Group>
+                    <Text size="sm" c="dimmed" lineClamp={1}>
+                      {event.place}
+                    </Text>
+                    <Text size="sm" fw={600}>
+                      {formatDateShort(event.date)} · {formatEventTime12h(event.time)}
+                    </Text>
+                  </Stack>
+                </Card>
+              ))}
+            </SimpleGrid>
+          )}
         </Stack>
       </Container>
     </>

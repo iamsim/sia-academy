@@ -13,3 +13,7 @@ export const paths = {
     events: '/app/events',
   },
 } as const
+
+export function eventDetailPath(eventId: number | string) {
+  return `${paths.events}/${eventId}`
+}
