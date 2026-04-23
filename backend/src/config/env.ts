@@ -24,4 +24,8 @@ export const env = {
   port: Number(process.env.PORT ?? 4000),
   databaseUrl: process.env.DATABASE_URL ?? defaultDatabaseUrl,
   frontendOrigin: process.env.FRONTEND_ORIGIN ?? 'http://localhost:5173',
+  frontendOrigins: (process.env.FRONTEND_ORIGIN ?? 'http://localhost:5173')
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean),
 }

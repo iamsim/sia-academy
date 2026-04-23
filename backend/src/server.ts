@@ -18,14 +18,30 @@ function mountApiRoutes(app: express.Application, basePath: string, router: Rout
   app.use(basePath, router)
 }
 
+function normalizeOrigin(origin: string) {
+  return origin.replace(/\/+$/, '')
+}
+
 async function start() {
   await initDb()
 
   const app = express()
   app.use(express.json())
+  const allowedOrigins = new Set(env.frontendOrigins.map(normalizeOrigin))
   app.use(
     cors({
-      origin: env.frontendOrigin,
+      origin(origin, callback) {
+        // Allow non-browser tools (curl, server-to-server) that send no Origin header.
+        if (!origin) {
+          callback(null, true)
+          return
+        }
+        if (allowedOrigins.has(normalizeOrigin(origin))) {
+          callback(null, true)
+          return
+        }
+        callback(new Error(`CORS blocked for origin: ${origin}`))
+      },
       credentials: true,
     }),
   )
