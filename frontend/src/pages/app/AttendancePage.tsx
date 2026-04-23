@@ -26,8 +26,12 @@ import type { AttendanceEntry, AttendanceStatus, AttendanceSummaryRecord } from 
 
 const attendancePageSize = 10
 
+/** Local calendar date (YYYY-MM-DD); avoids UTC skew from `toISOString()` for "today" attendance. */
 function formatDateInput(date: Date) {
-  return date.toISOString().slice(0, 10)
+  const y = date.getFullYear()
+  const m = String(date.getMonth() + 1).padStart(2, '0')
+  const d = String(date.getDate()).padStart(2, '0')
+  return `${y}-${m}-${d}`
 }
 
 function statusColor(status: AttendanceStatus) {
@@ -70,7 +74,7 @@ export function AttendancePage() {
   const [editableEntries, setEditableEntries] = useState<AttendanceEntry[]>([])
 
   async function refreshSummary() {
-    const summary = await getAttendanceSummary({ from: fromDate, to: toDate })
+    const summary = await getAttendanceSummary({ from: fromDate, to: toDate, today })
     setRecords(summary.records)
     setTodayCount(summary.todayCount)
     setMonthCount(summary.monthCount)
@@ -80,7 +84,7 @@ export function AttendancePage() {
   useEffect(() => {
     let active = true
     ;(async () => {
-      const summary = await getAttendanceSummary({ from: fromDate, to: toDate })
+      const summary = await getAttendanceSummary({ from: fromDate, to: toDate, today })
       if (!active) return
       setRecords(summary.records)
       setTodayCount(summary.todayCount)
@@ -90,7 +94,7 @@ export function AttendancePage() {
     return () => {
       active = false
     }
-  }, [fromDate, toDate])
+  }, [fromDate, toDate, today])
 
   const totalPages = Math.max(1, Math.ceil(records.length / attendancePageSize))
   const safePage = Math.min(page, totalPages)
@@ -260,9 +264,13 @@ export function AttendancePage() {
           </Button>
           <Button
             onClick={async () => {
-              await saveAttendanceByDate(today, todayDraftEntries)
-              await refreshSummary()
-              setTakeAttendanceModalOpened(false)
+              try {
+                await saveAttendanceByDate(today, todayDraftEntries)
+                await refreshSummary()
+                setTakeAttendanceModalOpened(false)
+              } catch (e) {
+                alert(e instanceof Error ? e.message : 'Failed to save attendance')
+              }
             }}
           >
             Submit Attendance
@@ -291,10 +299,14 @@ export function AttendancePage() {
                 <Button
                   size="xs"
                   onClick={async () => {
-                    await saveAttendanceByDate(selectedDate, editableEntries)
-                    setSelectedEntries(editableEntries)
-                    await refreshSummary()
-                    setStatusEditMode(false)
+                    try {
+                      await saveAttendanceByDate(selectedDate, editableEntries)
+                      setSelectedEntries(editableEntries)
+                      await refreshSummary()
+                      setStatusEditMode(false)
+                    } catch (e) {
+                      alert(e instanceof Error ? e.message : 'Failed to save attendance')
+                    }
                   }}
                 >
                   Save changes

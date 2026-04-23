@@ -192,12 +192,36 @@ export const swaggerSpec = swaggerJsdoc({
         },
         post: { summary: 'Create event', responses: { '201': { description: 'Created' } } },
       },
+      '/api/events/{id}': {
+        put: {
+          summary: 'Update event',
+          parameters: [{ in: 'path', name: 'id', required: true, schema: { type: 'integer' } }],
+          responses: {
+            '200': { description: 'Updated' },
+            '404': { description: 'Not found' },
+          },
+        },
+        delete: {
+          summary: 'Delete event',
+          parameters: [{ in: 'path', name: 'id', required: true, schema: { type: 'integer' } }],
+          responses: {
+            '204': { description: 'Deleted' },
+            '404': { description: 'Not found' },
+          },
+        },
+      },
       '/api/attendance/summary': {
         get: {
           summary: 'Attendance summary and daily counts',
           parameters: [
             { in: 'query', name: 'from', schema: { type: 'string' } },
             { in: 'query', name: 'to', schema: { type: 'string' } },
+            {
+              in: 'query',
+              name: 'today',
+              schema: { type: 'string', format: 'date' },
+              description: 'Which calendar day counts as "today" for todayCount (YYYY-MM-DD). Defaults to server local date.',
+            },
           ],
           responses: { '200': { description: 'OK' } },
         },

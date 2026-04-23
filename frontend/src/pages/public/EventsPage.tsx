@@ -5,6 +5,7 @@ import type { AcademyEvent } from '@/api/types'
 import { HeroBackdrop } from '@/components/common/HeroBackdrop'
 import { heroOverlays, readableOnPhoto } from '@/constants/hero-overlays'
 import { siteImages } from '@/constants/site-images'
+import { formatEventTime12h } from '@/utils/format-event-time'
 
 function formatDateDisplay(date: string) {
   if (!date) return '-'
@@ -89,7 +90,7 @@ export function EventsPage() {
                   <Text size="sm" c="dimmed">
                     Time
                   </Text>
-                  <Text fw={600}>{event.time}</Text>
+                  <Text fw={600}>{formatEventTime12h(event.time)}</Text>
                 </Grid.Col>
               </Grid>
               <Text c="dimmed" mt="sm">

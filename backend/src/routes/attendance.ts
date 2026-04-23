@@ -3,7 +3,7 @@ import { z } from 'zod'
 import { pool } from '../db/pool.js'
 
 const attendanceEntrySchema = z.object({
-  studentId: z.number().int().positive(),
+  studentId: z.coerce.number().int().positive(),
   status: z.enum(['Present', 'Absent']),
 })
 
@@ -15,11 +15,26 @@ function normalizeDate(date: string) {
   return date.slice(0, 10)
 }
 
+/** Calendar date in the server (or Node) local timezone — matches browser local date on typical dev setups. */
+function localDateString(d = new Date()) {
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+
 export const attendanceRouter = Router()
+
+function parseTodayQuery(value: unknown, fallback: string) {
+  if (typeof value !== 'string') return fallback
+  const s = value.slice(0, 10)
+  return /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : fallback
+}
 
 attendanceRouter.get('/summary', async (req, res, next) => {
   try {
-    const today = new Date().toISOString().slice(0, 10)
+    const serverToday = localDateString()
+    const today = parseTodayQuery(req.query.today, serverToday)
     const from = String(req.query.from ?? today.slice(0, 8) + '01')
     const to = String(req.query.to ?? today)
 
@@ -62,7 +77,8 @@ attendanceRouter.get('/summary', async (req, res, next) => {
       d >= new Date(`${from}T00:00:00`);
       d.setDate(d.getDate() - 1)
     ) {
-      const date = d.toISOString().slice(0, 10)
+      // Must match calendar dates from Postgres — `toISOString()` is UTC and misaligns dayMap keys (e.g. IST).
+      const date = localDateString(d)
       records.push(
         dayMap.get(date) ?? {
           date,

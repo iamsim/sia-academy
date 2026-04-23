@@ -78,9 +78,18 @@ export function createEvent(payload: Omit<AcademyEvent, 'id'>) {
   return apiRequest<AcademyEvent>('/events', { method: 'POST', body: payload })
 }
 
-export function getAttendanceSummary(params: { from: string; to: string }) {
-  const query = new URLSearchParams(params).toString()
-  return apiRequest<AttendanceSummaryResponse>(`/attendance/summary?${query}`)
+export function updateEvent(id: number, payload: Omit<AcademyEvent, 'id'>) {
+  return apiRequest<AcademyEvent>(`/events/${id}`, { method: 'PUT', body: payload })
+}
+
+export function deleteEvent(id: number) {
+  return apiRequest<void>(`/events/${id}`, { method: 'DELETE' })
+}
+
+export function getAttendanceSummary(params: { from: string; to: string; today?: string }) {
+  const q = new URLSearchParams({ from: params.from, to: params.to })
+  if (params.today) q.set('today', params.today)
+  return apiRequest<AttendanceSummaryResponse>(`/attendance/summary?${q}`)
 }
 
 export function getAttendanceByDate(date: string) {

@@ -1,4 +1,5 @@
 import {
+  ActionIcon,
   Button,
   Card,
   Group,
@@ -7,24 +8,20 @@ import {
   Stack,
   Table,
   Text,
+  Textarea,
   TextInput,
   Title,
 } from '@mantine/core'
 import { useMediaQuery } from '@mantine/hooks'
-import { IconPlus } from '@tabler/icons-react'
+import { IconEdit, IconPlus, IconTrash } from '@tabler/icons-react'
 import { useEffect, useMemo, useState } from 'react'
-import { createEvent, listEvents } from '@/api/services'
+import { createEvent, deleteEvent, listEvents, updateEvent } from '@/api/services'
 import type { AcademyEvent } from '@/api/types'
+import { formatEventTime12h } from '@/utils/format-event-time'
 
-type NewEventInput = {
-  eventName: string
-  place: string
-  date: string
-  time: string
-  description: string
-}
+type EventDraft = Omit<AcademyEvent, 'id'>
 
-const emptyEvent: NewEventInput = {
+const emptyDraft: EventDraft = {
   eventName: '',
   place: '',
   date: '',
@@ -42,12 +39,88 @@ function formatDateDisplay(date: string) {
   }).format(new Date(`${date}T00:00:00`))
 }
 
+/** `<input type="time">` expects HH:mm */
+function timeForInput(time: string) {
+  const t = time.trim()
+  if (t.length >= 5) return t.slice(0, 5)
+  return t
+}
+
+function EventFields({
+  value,
+  onChange,
+}: {
+  value: EventDraft
+  onChange: (patch: Partial<EventDraft>) => void
+}) {
+  return (
+    <Stack>
+      <TextInput
+        label="Event name"
+        value={value.eventName}
+        onChange={(e) => onChange({ eventName: e.currentTarget.value })}
+        required
+      />
+      <TextInput
+        label="Place"
+        value={value.place}
+        onChange={(e) => onChange({ place: e.currentTarget.value })}
+        required
+      />
+      <TextInput
+        label="Date"
+        type="date"
+        value={value.date}
+        onChange={(e) => onChange({ date: e.currentTarget.value })}
+        required
+      />
+      <TextInput
+        label="Time"
+        type="time"
+        value={timeForInput(value.time)}
+        onChange={(e) => onChange({ time: e.currentTarget.value })}
+        required
+      />
+      <Textarea
+        label="Description"
+        description="What to bring, venue landmarks, schedule notes, etc."
+        placeholder="e.g. Bring dobok and water bottle. Venue: main hall, second floor past the reception desk."
+        value={value.description}
+        onChange={(e) => onChange({ description: e.currentTarget.value })}
+        minRows={4}
+        autosize
+        maxRows={12}
+        required
+      />
+    </Stack>
+  )
+}
+
+function buildEventPayload(draft: EventDraft): Omit<AcademyEvent, 'id'> | null {
+  const eventName = draft.eventName.trim()
+  const place = draft.place.trim()
+  const description = draft.description.trim()
+  const time = draft.time.trim()
+  if (!eventName || !place || !draft.date || !time || !description) return null
+  return {
+    eventName,
+    place,
+    date: draft.date,
+    time,
+    description,
+  }
+}
+
 export function EventsManagementPage() {
   const isMobile = useMediaQuery('(max-width: 48em)')
   const [events, setEvents] = useState<AcademyEvent[]>([])
   const [loading, setLoading] = useState(true)
   const [createModalOpen, setCreateModalOpen] = useState(false)
-  const [newEvent, setNewEvent] = useState<NewEventInput>(emptyEvent)
+  const [newEvent, setNewEvent] = useState<EventDraft>(emptyDraft)
+  const [editEvent, setEditEvent] = useState<AcademyEvent | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<AcademyEvent | null>(null)
+  const [saving, setSaving] = useState(false)
+  const [deleting, setDeleting] = useState(false)
 
   useEffect(() => {
     let active = true
@@ -69,31 +142,58 @@ export function EventsManagementPage() {
     [events],
   )
 
-  function closeModal() {
+  function closeCreateModal() {
     setCreateModalOpen(false)
-    setNewEvent(emptyEvent)
+    setNewEvent(emptyDraft)
   }
 
-  function handleAddEvent() {
-    const eventName = newEvent.eventName.trim()
-    const place = newEvent.place.trim()
-    const description = newEvent.description.trim()
-    if (!eventName || !place || !newEvent.date || !newEvent.time || !description) return
+  async function handleAddEvent() {
+    const payload = buildEventPayload(newEvent)
+    if (!payload) return
+    try {
+      const created = await createEvent(payload)
+      setEvents((prev) => [created, ...prev])
+      closeCreateModal()
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'Failed to add event')
+    }
+  }
 
-    createEvent({
-      eventName,
-      place,
-      date: newEvent.date,
-      time: newEvent.time,
-      description,
-    })
-      .then((created) => {
-        setEvents((prev) => [created, ...prev])
-      })
-      .catch((error) => {
-        alert(error instanceof Error ? error.message : 'Failed to add event')
-      })
-    closeModal()
+  async function handleSaveEdit() {
+    if (!editEvent) return
+    const draft: EventDraft = {
+      eventName: editEvent.eventName,
+      place: editEvent.place,
+      date: editEvent.date,
+      time: editEvent.time,
+      description: editEvent.description,
+    }
+    const payload = buildEventPayload(draft)
+    if (!payload) return
+    setSaving(true)
+    try {
+      const updated = await updateEvent(editEvent.id, payload)
+      setEvents((prev) => prev.map((e) => (e.id === updated.id ? updated : e)))
+      setEditEvent(null)
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'Failed to update event')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function handleConfirmDelete() {
+    if (!deleteTarget) return
+    setDeleting(true)
+    try {
+      await deleteEvent(deleteTarget.id)
+      setEvents((prev) => prev.filter((e) => e.id !== deleteTarget.id))
+      setDeleteTarget(null)
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'Failed to delete event')
+    } finally {
+      setDeleting(false)
+    }
   }
 
   return (
@@ -119,12 +219,13 @@ export function EventsManagementPage() {
               <Table.Th>Date</Table.Th>
               <Table.Th>Time</Table.Th>
               <Table.Th>Description</Table.Th>
+              <Table.Th w={100}>Actions</Table.Th>
             </Table.Tr>
           </Table.Thead>
           <Table.Tbody>
             {loading && (
               <Table.Tr>
-                <Table.Td colSpan={5}>Loading events...</Table.Td>
+                <Table.Td colSpan={6}>Loading events...</Table.Td>
               </Table.Tr>
             )}
             {sortedEvents.map((event) => (
@@ -132,8 +233,28 @@ export function EventsManagementPage() {
                 <Table.Td>{event.eventName}</Table.Td>
                 <Table.Td>{event.place}</Table.Td>
                 <Table.Td>{formatDateDisplay(event.date)}</Table.Td>
-                <Table.Td>{event.time}</Table.Td>
+                <Table.Td>{formatEventTime12h(event.time)}</Table.Td>
                 <Table.Td>{event.description}</Table.Td>
+                <Table.Td>
+                  <Group gap={6} wrap="nowrap">
+                    <ActionIcon
+                      variant="light"
+                      color="siaSky"
+                      aria-label="Edit event"
+                      onClick={() => setEditEvent({ ...event })}
+                    >
+                      <IconEdit size={16} />
+                    </ActionIcon>
+                    <ActionIcon
+                      variant="light"
+                      color="red"
+                      aria-label="Delete event"
+                      onClick={() => setDeleteTarget(event)}
+                    >
+                      <IconTrash size={16} />
+                    </ActionIcon>
+                  </Group>
+                </Table.Td>
               </Table.Tr>
             ))}
           </Table.Tbody>
@@ -142,66 +263,78 @@ export function EventsManagementPage() {
 
       <Modal
         opened={createModalOpen}
-        onClose={closeModal}
+        onClose={closeCreateModal}
         title="Add New Event"
         centered
         fullScreen={isMobile}
       >
         <Stack>
-          <TextInput
-            label="Event name"
-            value={newEvent.eventName}
-            onChange={(event) => {
-              const value = event.currentTarget.value
-              setNewEvent((prev) => ({ ...prev, eventName: value }))
-            }}
-            required
-          />
-          <TextInput
-            label="Place"
-            value={newEvent.place}
-            onChange={(event) => {
-              const value = event.currentTarget.value
-              setNewEvent((prev) => ({ ...prev, place: value }))
-            }}
-            required
-          />
-          <TextInput
-            label="Date"
-            type="date"
-            value={newEvent.date}
-            onChange={(event) => {
-              const value = event.currentTarget.value
-              setNewEvent((prev) => ({ ...prev, date: value }))
-            }}
-            required
-          />
-          <TextInput
-            label="Time"
-            type="time"
-            value={newEvent.time}
-            onChange={(event) => {
-              const value = event.currentTarget.value
-              setNewEvent((prev) => ({ ...prev, time: value }))
-            }}
-            required
-          />
-          <TextInput
-            label="Description"
-            value={newEvent.description}
-            onChange={(event) => {
-              const value = event.currentTarget.value
-              setNewEvent((prev) => ({ ...prev, description: value }))
-            }}
-            required
+          <EventFields
+            value={newEvent}
+            onChange={(patch) => setNewEvent((prev) => ({ ...prev, ...patch }))}
           />
           <Group justify="flex-end">
-            <Button variant="default" onClick={closeModal}>
+            <Button variant="default" onClick={closeCreateModal}>
               Cancel
             </Button>
             <Button onClick={handleAddEvent}>Add Event</Button>
           </Group>
         </Stack>
+      </Modal>
+
+      <Modal
+        opened={editEvent !== null}
+        onClose={() => setEditEvent(null)}
+        title="Edit Event"
+        centered
+        fullScreen={isMobile}
+      >
+        {editEvent && (
+          <Stack>
+            <EventFields
+              value={{
+                eventName: editEvent.eventName,
+                place: editEvent.place,
+                date: editEvent.date,
+                time: editEvent.time,
+                description: editEvent.description,
+              }}
+              onChange={(patch) => setEditEvent((prev) => (prev ? { ...prev, ...patch } : null))}
+            />
+            <Group justify="flex-end">
+              <Button variant="default" onClick={() => setEditEvent(null)}>
+                Cancel
+              </Button>
+              <Button onClick={handleSaveEdit} loading={saving}>
+                Save changes
+              </Button>
+            </Group>
+          </Stack>
+        )}
+      </Modal>
+
+      <Modal
+        opened={deleteTarget !== null}
+        onClose={() => setDeleteTarget(null)}
+        title="Delete event"
+        centered
+      >
+        {deleteTarget && (
+          <Stack gap="md">
+            <Text size="sm">
+              Delete <strong>{deleteTarget.eventName}</strong> on {formatDateDisplay(deleteTarget.date)} at{' '}
+              {formatEventTime12h(deleteTarget.time)}? This cannot be undone.
+            </Text>
+            <Group justify="flex-end">
+              <Button variant="default" onClick={() => setDeleteTarget(null)}>
+                Cancel
+              </Button>
+              <Button color="red" onClick={handleConfirmDelete} loading={deleting}>
+                Delete
+              </Button>
+            </Group>
+          </Stack>
+        )}
       </Modal>
     </Card>
   )
